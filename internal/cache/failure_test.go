@@ -267,12 +267,43 @@ func TestClear_UnremovableEntryFails(t *testing.T) {
 	}
 }
 
-func TestClear_BadPatternInDirFails(t *testing.T) {
-	// Clear globs inside the cache dir, so an unbalanced "[" in its path is a
-	// malformed pattern.
-	t.Setenv("XDG_CACHE_HOME", filepath.Join(t.TempDir(), "a["))
+func TestClear_GlobCharactersInDir(t *testing.T) {
+	for _, name := range []string{"a[b]", "a[", "a*"} {
+		t.Run(name, func(t *testing.T) {
+			if runtime.GOOS == "windows" && name == "a*" {
+				t.Skip("Windows doesn't allow * in file names")
+			}
+			t.Setenv("XDG_CACHE_HOME", filepath.Join(t.TempDir(), name))
+			Store("k", &Entry{JobCount: 1})
+			if _, ok := Load("k"); !ok {
+				t.Fatal("expected cache hit before Clear")
+			}
+			if err := Clear(); err != nil {
+				t.Fatal(err)
+			}
+			if _, ok := Load("k"); ok {
+				t.Error("Clear left the entry behind")
+			}
+		})
+	}
+}
+
+func TestClear_UnreadableDirFails(t *testing.T) {
+	// XDG_CACHE_HOME is a regular file, so the cache dir below it can't be listed.
+	blocker := filepath.Join(t.TempDir(), "file")
+	if err := os.WriteFile(blocker, nil, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("XDG_CACHE_HOME", blocker)
 	if err := Clear(); err == nil {
-		t.Error("Clear must report a cache dir it can't search")
+		t.Error("Clear must report a cache dir it can't list")
+	}
+}
+
+func TestClear_MissingDirIsANoOp(t *testing.T) {
+	t.Setenv("XDG_CACHE_HOME", t.TempDir())
+	if err := Clear(); err != nil {
+		t.Errorf("Clear on a cache that was never written: %v", err)
 	}
 }
 
