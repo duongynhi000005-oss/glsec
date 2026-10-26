@@ -289,12 +289,12 @@ func TestClear_GlobCharactersInDir(t *testing.T) {
 }
 
 func TestClear_UnreadableDirFails(t *testing.T) {
-	// XDG_CACHE_HOME is a regular file, so the cache dir below it can't be listed.
-	blocker := filepath.Join(t.TempDir(), "file")
-	if err := os.WriteFile(blocker, nil, 0o600); err != nil {
+	// The cache dir itself is a regular file. A path through a file would not
+	// do: Windows reports that as missing, which Clear treats as empty.
+	t.Setenv("XDG_CACHE_HOME", t.TempDir())
+	if err := os.WriteFile(Dir(), nil, 0o600); err != nil {
 		t.Fatal(err)
 	}
-	t.Setenv("XDG_CACHE_HOME", blocker)
 	if err := Clear(); err == nil {
 		t.Error("Clear must report a cache dir it can't list")
 	}
